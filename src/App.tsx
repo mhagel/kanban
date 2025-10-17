@@ -9,6 +9,7 @@ type Action =
   | { type: "add"; column: Column; card: Card }
   | { type: "move"; from: Column; to: Column; cardId: string }
   | { type: "remove"; column: Column; cardId: string }
+  | { type: "update"; column: Column; cardId: string; changes: Partial<Card> }
   | { type: "set"; state: State };
 
 const STORAGE_KEY = "kanban.state.v1";
@@ -35,6 +36,14 @@ function reducer(state: State, action: Action): State {
         ...state,
         [action.column]: state[action.column].filter(
           (c) => c.id !== action.cardId
+        ),
+      };
+    }
+    case "update": {
+      return {
+        ...state,
+        [action.column]: state[action.column].map((c) =>
+          c.id === action.cardId ? { ...c, ...action.changes } : c
         ),
       };
     }
@@ -93,6 +102,8 @@ export default function App() {
   const [description, setDescription] = useState("");
   const [column, setColumn] = useState<Column>("todo");
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState<string>("");
 
   const addCard = (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -106,7 +117,7 @@ export default function App() {
     setTitle("");
     setDescription("");
   };
-
+  console.log("draggingId", draggingId);
   return (
     <div className="min-h-screen bg-slate-100 p-6 w-full flex flex-col">
       <header className="mx-auto mb-6 w-full">
@@ -161,6 +172,7 @@ export default function App() {
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {
                     const payload = e.dataTransfer.getData("text/plain");
+                    setDraggingId(null);
                     try {
                       const parsed = JSON.parse(payload) as {
                         id: string;
@@ -197,23 +209,71 @@ export default function App() {
                         key={card.id}
                         draggable
                         onDragStart={(e) => {
+                          setDraggingId(card.id); // TODO: clunky
                           e.dataTransfer.setData(
                             "text/plain",
                             JSON.stringify({ id: card.id, from: key })
                           );
                           e.dataTransfer.effectAllowed = "move";
-                          setDraggingId(card.id);
                         }}
                         onDragEnd={() => setDraggingId(null)}
-                        className={`border rounded p-3 bg-slate-200 w-full h-[160px] flex flex-col ${
-                          draggingId === card.id
-                            ? "cursor-grabbing"
-                            : "cursor-grab"
+                        className={`border rounded p-3 bg-slate-200 w-full h-[160px] flex flex-col cursor-grab ${
+                          !!draggingId &&
+                          draggingId === card.id &&
+                          "cursor-grabbing"
                         }`}
                       >
                         <div className="flex flex-col gap-2 h-full justify-between">
                           <div className="text-slate-900 flex flex-col">
-                            <div className="font-semibold">{card.title}</div>
+                            {editingId === card.id ? (
+                              <input
+                                autoFocus
+                                className="font-semibold border-b px-1 py-0.5 bg-transparent"
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                onBlur={() => {
+                                  const v = editValue.trim();
+                                  if (v && v !== card.title) {
+                                    dispatch({
+                                      type: "update",
+                                      column: key,
+                                      cardId: card.id,
+                                      changes: { title: v },
+                                    });
+                                  }
+                                  setEditingId(null);
+                                  setEditValue("");
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    const v = editValue.trim();
+                                    if (v && v !== card.title) {
+                                      dispatch({
+                                        type: "update",
+                                        column: key,
+                                        cardId: card.id,
+                                        changes: { title: v },
+                                      });
+                                    }
+                                    setEditingId(null);
+                                    setEditValue("");
+                                  } else if (e.key === "Escape") {
+                                    setEditingId(null);
+                                    setEditValue("");
+                                  }
+                                }}
+                              />
+                            ) : (
+                              <div
+                                className="font-semibold"
+                                onDoubleClick={() => {
+                                  setEditingId(card.id);
+                                  setEditValue(card.title);
+                                }}
+                              >
+                                {card.title}
+                              </div>
+                            )}
                             {card.description && (
                               <div className="text-sm">{card.description}</div>
                             )}
