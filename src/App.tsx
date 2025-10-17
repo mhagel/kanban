@@ -1,137 +1,23 @@
-import React, { useReducer, useEffect, useRef, useState } from "react";
-
-type Card = { id: string; title: string; description?: string };
-type Column = "todo" | "inprogress" | "done";
-
-type State = Record<Column, Card[]>;
-
-type Action =
-  | { type: "add"; column: Column; card: Card }
-  | { type: "move"; from: Column; to: Column; cardId: string; index?: number }
-  | { type: "remove"; column: Column; cardId: string }
-  | { type: "update"; column: Column; cardId: string; changes: Partial<Card> }
-  | { type: "set"; state: State };
-
-const STORAGE_KEY = "kanban.state.v1";
-
-function reducer(state: State, action: Action): State {
-  switch (action.type) {
-    case "add": {
-      return {
-        ...state,
-        [action.column]: [action.card, ...state[action.column]],
-      };
-    }
-    case "move": {
-      // Remove from source
-      const fromArr = state[action.from];
-      const toArr = state[action.to];
-      const sourceIndex = fromArr.findIndex((c) => c.id === action.cardId);
-      if (sourceIndex === -1) return state;
-      const card = fromArr[sourceIndex];
-      const newFrom = fromArr
-        .slice(0, sourceIndex)
-        .concat(fromArr.slice(sourceIndex + 1));
-
-      // determine target index (default append)
-      let targetIndex = action.index;
-      if (targetIndex === undefined || targetIndex === null) {
-        targetIndex = toArr.length;
-      }
-
-      // moving within same column: adjust index after removal
-      if (action.from === action.to) {
-        // insert into the array after removal
-        const adjustedIndex = Math.max(
-          0,
-          Math.min(targetIndex, newFrom.length)
-        );
-        const newCol = newFrom.slice();
-        // if sourceIndex < targetIndex originally, the removal shifted indices left
-        // adjustedIndex already accounts for current newFrom length
-        newCol.splice(adjustedIndex, 0, card);
-        return { ...state, [action.from]: newCol };
-      }
-
-      // moving across columns
-      const newTo = toArr.slice();
-      const insertIndex = Math.max(0, Math.min(targetIndex, newTo.length));
-      newTo.splice(insertIndex, 0, card);
-      return { ...state, [action.from]: newFrom, [action.to]: newTo };
-    }
-    case "remove": {
-      return {
-        ...state,
-        [action.column]: state[action.column].filter(
-          (c) => c.id !== action.cardId
-        ),
-      };
-    }
-    case "update": {
-      return {
-        ...state,
-        [action.column]: state[action.column].map((c) =>
-          c.id === action.cardId ? { ...c, ...action.changes } : c
-        ),
-      };
-    }
-    case "set":
-      return action.state;
-    default:
-      return state;
-  }
-}
-
-const initialState: State = {
-  todo: [],
-  inprogress: [],
-  done: [],
-};
-
-function usePersistedReducer(): [State, React.Dispatch<Action>] {
-  const [state, dispatch] = useReducer(reducer, initialState);
-  const initiated = useRef(false);
-
-  // hydrate from localStorage once
-  useEffect(() => {
-    if (initiated.current) return;
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as State;
-        dispatch({ type: "set", state: parsed });
-      }
-    } catch (e) {
-      // ignore parse errors
-    }
-    initiated.current = true;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // persist on change
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch (e) {
-      // ignore
-    }
-  }, [state]);
-
-  return [state, dispatch];
-}
+import React, { useState } from "react";
+import { useKanban } from "./context/KanbanContext";
+import type { Card, Column } from "./context/KanbanContext";
+import DraggableCard from "./components/DraggableCard";
 
 function uid() {
   return Math.random().toString(36).slice(2, 9);
 }
 
 export default function App() {
-  const [state, dispatch] = usePersistedReducer();
+  const { state, dispatch } = useKanban();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [column, setColumn] = useState<Column>("todo");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>("");
+  const [dragOverIndexByColumn, setDragOverIndexByColumn] = useState<
+    Record<Column, number | null>
+  >({ todo: null, inprogress: null, done: null });
 
   const addCard = (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -145,7 +31,7 @@ export default function App() {
     setTitle("");
     setDescription("");
   };
-  console.log("draggingId", draggingId);
+
   return (
     <div className="min-h-screen bg-slate-100 p-6 w-full flex flex-col">
       <header className="mx-auto mb-6 w-full">
@@ -162,7 +48,7 @@ export default function App() {
           />
           <input
             className="flex-1 rounded border px-3 py-2"
-            placeholder="Description"
+            placeholder="Description (optional)"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
@@ -208,7 +94,7 @@ export default function App() {
                       };
                       if (parsed && parsed.id) {
                         // check if id is already in column
-                        if (state[key].some((c) => c.id === parsed.id)) {
+                        if (state[key].some((c: Card) => c.id === parsed.id)) {
                           return;
                         }
 
@@ -233,124 +119,21 @@ export default function App() {
                     </span>
                   </h2>
                   <ul className="space-y-2">
-                    {state[key].map((card, index) => (
-                      <li
+                    {state[key].map((card: Card, index: number) => (
+                      <DraggableCard
                         key={card.id}
-                        draggable
-                        onDragStart={(e) => {
-                          setDraggingId(card.id);
-                          e.dataTransfer.setData(
-                            "text/plain",
-                            JSON.stringify({ id: card.id, from: key })
-                          );
-                          e.dataTransfer.effectAllowed = "move";
-                        }}
-                        onDragEnd={() => setDraggingId(null)}
-                        onDragOver={(e) => {
-                          e.preventDefault();
-                          e.dataTransfer.dropEffect = "move";
-                        }}
-                        onDrop={(e) => {
-                          const payload = e.dataTransfer.getData("text/plain");
-                          setDraggingId(null);
-                          try {
-                            const parsed = JSON.parse(payload) as {
-                              id: string;
-                              from: Column;
-                            };
-                            if (parsed && parsed.id) {
-                              // avoid no-op
-                              if (parsed.id === card.id && parsed.from === key)
-                                return;
-                              dispatch({
-                                type: "move",
-                                from: parsed.from,
-                                to: key,
-                                cardId: parsed.id,
-                                index,
-                              });
-                            }
-                          } catch (err) {
-                            // ignore
-                          }
-                        }}
-                        className={`border rounded p-3 bg-slate-200 w-full h-[160px] flex flex-col cursor-grab ${
-                          !!draggingId &&
-                          draggingId === card.id &&
-                          "cursor-grabbing"
-                        }`}
-                      >
-                        <div className="flex flex-col gap-2 h-full justify-between">
-                          <div className="text-slate-900 flex flex-col">
-                            {editingId === card.id ? (
-                              <input
-                                autoFocus
-                                className="font-semibold border-b px-1 py-0.5 bg-transparent"
-                                value={editValue}
-                                onChange={(e) => setEditValue(e.target.value)}
-                                onBlur={() => {
-                                  const v = editValue.trim();
-                                  if (v && v !== card.title) {
-                                    dispatch({
-                                      type: "update",
-                                      column: key,
-                                      cardId: card.id,
-                                      changes: { title: v },
-                                    });
-                                  }
-                                  setEditingId(null);
-                                  setEditValue("");
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") {
-                                    const v = editValue.trim();
-                                    if (v && v !== card.title) {
-                                      dispatch({
-                                        type: "update",
-                                        column: key,
-                                        cardId: card.id,
-                                        changes: { title: v },
-                                      });
-                                    }
-                                    setEditingId(null);
-                                    setEditValue("");
-                                  } else if (e.key === "Escape") {
-                                    setEditingId(null);
-                                    setEditValue("");
-                                  }
-                                }}
-                              />
-                            ) : (
-                              <div
-                                className="font-semibold"
-                                onDoubleClick={() => {
-                                  setEditingId(card.id);
-                                  setEditValue(card.title);
-                                }}
-                              >
-                                {card.title}
-                              </div>
-                            )}
-                            {card.description && (
-                              <div className="text-sm">{card.description}</div>
-                            )}
-                          </div>
-                          <div className="flex gap-1 justify-between">
-                            <button
-                              className="text-sm px-2 py-1 border rounded text-red-600"
-                              onClick={() =>
-                                dispatch({
-                                  type: "remove",
-                                  column: key,
-                                  cardId: card.id,
-                                })
-                              }
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        </div>
-                      </li>
+                        card={card}
+                        column={key}
+                        index={index}
+                        draggingId={draggingId}
+                        setDraggingId={setDraggingId}
+                        editingId={editingId}
+                        setEditingId={setEditingId}
+                        editValue={editValue}
+                        setEditValue={setEditValue}
+                        dragOverIndexByColumn={dragOverIndexByColumn}
+                        setDragOverIndexByColumn={setDragOverIndexByColumn}
+                      />
                     ))}
                   </ul>
                 </div>
