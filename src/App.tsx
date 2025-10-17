@@ -1,0 +1,251 @@
+import React, { useReducer, useEffect, useRef, useState } from "react";
+
+type Card = { id: string; title: string; description?: string };
+type Column = "todo" | "inprogress" | "done";
+
+type State = Record<Column, Card[]>;
+
+type Action =
+  | { type: "add"; column: Column; card: Card }
+  | { type: "move"; from: Column; to: Column; cardId: string }
+  | { type: "remove"; column: Column; cardId: string }
+  | { type: "set"; state: State };
+
+const STORAGE_KEY = "kanban.state.v1";
+
+function reducer(state: State, action: Action): State {
+  switch (action.type) {
+    case "add": {
+      return {
+        ...state,
+        [action.column]: [action.card, ...state[action.column]],
+      };
+    }
+    case "move": {
+      const card = state[action.from].find((c) => c.id === action.cardId);
+      if (!card) return state;
+      return {
+        ...state,
+        [action.from]: state[action.from].filter((c) => c.id !== action.cardId),
+        [action.to]: [card, ...state[action.to]],
+      };
+    }
+    case "remove": {
+      return {
+        ...state,
+        [action.column]: state[action.column].filter(
+          (c) => c.id !== action.cardId
+        ),
+      };
+    }
+    case "set":
+      return action.state;
+    default:
+      return state;
+  }
+}
+
+const initialState: State = {
+  todo: [],
+  inprogress: [],
+  done: [],
+};
+
+function usePersistedReducer(): [State, React.Dispatch<Action>] {
+  const [state, dispatch] = useReducer(reducer, initialState);
+  const inited = useRef(false);
+
+  // hydrate from localStorage once
+  useEffect(() => {
+    if (inited.current) return;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as State;
+        dispatch({ type: "set", state: parsed });
+      }
+    } catch (e) {
+      // ignore parse errors
+    }
+    inited.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // persist on change
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {
+      // ignore
+    }
+  }, [state]);
+
+  return [state, dispatch];
+}
+
+function uid() {
+  return Math.random().toString(36).slice(2, 9);
+}
+
+export default function App() {
+  const [state, dispatch] = usePersistedReducer();
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [column, setColumn] = useState<Column>("todo");
+
+  const addCard = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!title.trim()) return;
+    const card: Card = {
+      id: uid(),
+      title: title.trim(),
+      description: description.trim() || undefined,
+    };
+    dispatch({ type: "add", column, card });
+    setTitle("");
+    setDescription("");
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-100 p-6 w-full flex flex-col">
+      <header className="mx-auto mb-6 w-full">
+        <h1 className="text-2xl font-semibold text-slate-800">Kanban</h1>
+      </header>
+
+      <main className="flex flex-col mx-auto w-full">
+        <form onSubmit={addCard} className="mb-4 flex gap-2 text-slate-800">
+          <input
+            className="flex-1 rounded border px-3 py-2"
+            placeholder="New card title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+          <input
+            className="flex-1 rounded border px-3 py-2"
+            placeholder="Description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+          <select
+            className="rounded border px-2"
+            value={column}
+            onChange={(e) => setColumn(e.target.value as Column)}
+          >
+            <option value="todo">Todo</option>
+            <option value="inprogress">In Progress</option>
+            <option value="done">Done</option>
+          </select>
+          <button
+            className="bg-blue-600 text-white px-4 py-2 rounded"
+            type="submit"
+          >
+            Add
+          </button>
+        </form>
+
+        {/* columns */}
+        {(() => {
+          const columns: { key: Column; title: string }[] = [
+            { key: "todo", title: "To Do" },
+            { key: "inprogress", title: "In Progress" },
+            { key: "done", title: "Done" },
+          ];
+
+          return (
+            <section className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+              {columns.map(({ key, title }) => (
+                <div
+                  key={key}
+                  className="bg-white rounded shadow p-4 h-screen w-[360px]"
+                >
+                  <h2 className="font-medium mb-4 flex items-center justify-between text-slate-900">
+                    <span className="text-lg">{title}</span>
+                    <span className="text-sm text-slate-500">
+                      {state[key].length}
+                    </span>
+                  </h2>
+                  <ul className="space-y-2">
+                    {state[key].map((card) => (
+                      <li
+                        key={card.id}
+                        className="border rounded p-3 bg-slate-200 w-full h-[160px] flex flex-col"
+                      >
+                        <div className="flex flex-col gap-2 h-full justify-between">
+                          <div className="text-slate-900 flex flex-col">
+                            <div className="font-semibold">{card.title}</div>
+                            {card.description && (
+                              <div className="text-sm">{card.description}</div>
+                            )}
+                          </div>
+                          <div className="flex gap-1 justify-between">
+                            {key !== "todo" && (
+                              <button
+                                className="text-sm px-2 py-1 border rounded"
+                                onClick={() =>
+                                  dispatch({
+                                    type: "move",
+                                    from: key,
+                                    to: "todo",
+                                    cardId: card.id,
+                                  })
+                                }
+                              >
+                                ← Todo
+                              </button>
+                            )}
+                            {key !== "inprogress" && (
+                              <button
+                                className="text-sm px-2 py-1 border rounded"
+                                onClick={() =>
+                                  dispatch({
+                                    type: "move",
+                                    from: key,
+                                    to: "inprogress",
+                                    cardId: card.id,
+                                  })
+                                }
+                              >
+                                → In Progress
+                              </button>
+                            )}
+                            {key !== "done" && (
+                              <button
+                                className="text-sm px-2 py-1 border rounded"
+                                onClick={() =>
+                                  dispatch({
+                                    type: "move",
+                                    from: key,
+                                    to: "done",
+                                    cardId: card.id,
+                                  })
+                                }
+                              >
+                                ✓ Done
+                              </button>
+                            )}
+                            <button
+                              className="text-sm px-2 py-1 border rounded text-red-600"
+                              onClick={() =>
+                                dispatch({
+                                  type: "remove",
+                                  column: key,
+                                  cardId: card.id,
+                                })
+                              }
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </section>
+          );
+        })()}
+      </main>
+    </div>
+  );
+}
