@@ -7,7 +7,7 @@ type State = Record<Column, Card[]>;
 
 type Action =
   | { type: "add"; column: Column; card: Card }
-  | { type: "move"; from: Column; to: Column; cardId: string }
+  | { type: "move"; from: Column; to: Column; cardId: string; index?: number }
   | { type: "remove"; column: Column; cardId: string }
   | { type: "update"; column: Column; cardId: string; changes: Partial<Card> }
   | { type: "set"; state: State };
@@ -23,13 +23,41 @@ function reducer(state: State, action: Action): State {
       };
     }
     case "move": {
-      const card = state[action.from].find((c) => c.id === action.cardId);
-      if (!card) return state;
-      return {
-        ...state,
-        [action.from]: state[action.from].filter((c) => c.id !== action.cardId),
-        [action.to]: [card, ...state[action.to]],
-      };
+      // Remove from source
+      const fromArr = state[action.from];
+      const toArr = state[action.to];
+      const sourceIndex = fromArr.findIndex((c) => c.id === action.cardId);
+      if (sourceIndex === -1) return state;
+      const card = fromArr[sourceIndex];
+      const newFrom = fromArr
+        .slice(0, sourceIndex)
+        .concat(fromArr.slice(sourceIndex + 1));
+
+      // determine target index (default append)
+      let targetIndex = action.index;
+      if (targetIndex === undefined || targetIndex === null) {
+        targetIndex = toArr.length;
+      }
+
+      // moving within same column: adjust index after removal
+      if (action.from === action.to) {
+        // insert into the array after removal
+        const adjustedIndex = Math.max(
+          0,
+          Math.min(targetIndex, newFrom.length)
+        );
+        const newCol = newFrom.slice();
+        // if sourceIndex < targetIndex originally, the removal shifted indices left
+        // adjustedIndex already accounts for current newFrom length
+        newCol.splice(adjustedIndex, 0, card);
+        return { ...state, [action.from]: newCol };
+      }
+
+      // moving across columns
+      const newTo = toArr.slice();
+      const insertIndex = Math.max(0, Math.min(targetIndex, newTo.length));
+      newTo.splice(insertIndex, 0, card);
+      return { ...state, [action.from]: newFrom, [action.to]: newTo };
     }
     case "remove": {
       return {
@@ -189,6 +217,7 @@ export default function App() {
                           from: parsed.from,
                           to: key,
                           cardId: parsed.id,
+                          index: state[key].length,
                         });
                       }
                     } catch (err) {
@@ -197,19 +226,19 @@ export default function App() {
                   }}
                   className="bg-white rounded shadow p-4 h-screen w-[360px]"
                 >
-                  <h2 className="font-medium mb-4 flex items-center justify-between text-slate-900">
+                  <h2 className="font-medium mb-6 flex items-center justify-between text-slate-900">
                     <span className="text-lg">{title}</span>
                     <span className="text-sm text-slate-500">
                       {state[key].length}
                     </span>
                   </h2>
                   <ul className="space-y-2">
-                    {state[key].map((card) => (
+                    {state[key].map((card, index) => (
                       <li
                         key={card.id}
                         draggable
                         onDragStart={(e) => {
-                          setDraggingId(card.id); // TODO: clunky
+                          setDraggingId(card.id);
                           e.dataTransfer.setData(
                             "text/plain",
                             JSON.stringify({ id: card.id, from: key })
@@ -217,6 +246,34 @@ export default function App() {
                           e.dataTransfer.effectAllowed = "move";
                         }}
                         onDragEnd={() => setDraggingId(null)}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "move";
+                        }}
+                        onDrop={(e) => {
+                          const payload = e.dataTransfer.getData("text/plain");
+                          setDraggingId(null);
+                          try {
+                            const parsed = JSON.parse(payload) as {
+                              id: string;
+                              from: Column;
+                            };
+                            if (parsed && parsed.id) {
+                              // avoid no-op
+                              if (parsed.id === card.id && parsed.from === key)
+                                return;
+                              dispatch({
+                                type: "move",
+                                from: parsed.from,
+                                to: key,
+                                cardId: parsed.id,
+                                index,
+                              });
+                            }
+                          } catch (err) {
+                            // ignore
+                          }
+                        }}
                         className={`border rounded p-3 bg-slate-200 w-full h-[160px] flex flex-col cursor-grab ${
                           !!draggingId &&
                           draggingId === card.id &&
