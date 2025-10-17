@@ -53,11 +53,11 @@ const initialState: State = {
 
 function usePersistedReducer(): [State, React.Dispatch<Action>] {
   const [state, dispatch] = useReducer(reducer, initialState);
-  const inited = useRef(false);
+  const initiated = useRef(false);
 
   // hydrate from localStorage once
   useEffect(() => {
-    if (inited.current) return;
+    if (initiated.current) return;
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
@@ -67,7 +67,7 @@ function usePersistedReducer(): [State, React.Dispatch<Action>] {
     } catch (e) {
       // ignore parse errors
     }
-    inited.current = true;
+    initiated.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -92,6 +92,7 @@ export default function App() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [column, setColumn] = useState<Column>("todo");
+  const [draggingId, setDraggingId] = useState<string | null>(null);
 
   const addCard = (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -156,6 +157,32 @@ export default function App() {
               {columns.map(({ key, title }) => (
                 <div
                   key={key}
+                  // drop target
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    const payload = e.dataTransfer.getData("text/plain");
+                    try {
+                      const parsed = JSON.parse(payload) as {
+                        id: string;
+                        from: Column;
+                      };
+                      if (parsed && parsed.id) {
+                        // check if id is already in column
+                        if (state[key].some((c) => c.id === parsed.id)) {
+                          return;
+                        }
+
+                        dispatch({
+                          type: "move",
+                          from: parsed.from,
+                          to: key,
+                          cardId: parsed.id,
+                        });
+                      }
+                    } catch (err) {
+                      // ignore
+                    }
+                  }}
                   className="bg-white rounded shadow p-4 h-screen w-[360px]"
                 >
                   <h2 className="font-medium mb-4 flex items-center justify-between text-slate-900">
@@ -168,7 +195,21 @@ export default function App() {
                     {state[key].map((card) => (
                       <li
                         key={card.id}
-                        className="border rounded p-3 bg-slate-200 w-full h-[160px] flex flex-col"
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData(
+                            "text/plain",
+                            JSON.stringify({ id: card.id, from: key })
+                          );
+                          e.dataTransfer.effectAllowed = "move";
+                          setDraggingId(card.id);
+                        }}
+                        onDragEnd={() => setDraggingId(null)}
+                        className={`border rounded p-3 bg-slate-200 w-full h-[160px] flex flex-col ${
+                          draggingId === card.id
+                            ? "cursor-grabbing"
+                            : "cursor-grab"
+                        }`}
                       >
                         <div className="flex flex-col gap-2 h-full justify-between">
                           <div className="text-slate-900 flex flex-col">
@@ -178,51 +219,6 @@ export default function App() {
                             )}
                           </div>
                           <div className="flex gap-1 justify-between">
-                            {key !== "todo" && (
-                              <button
-                                className="text-sm px-2 py-1 border rounded"
-                                onClick={() =>
-                                  dispatch({
-                                    type: "move",
-                                    from: key,
-                                    to: "todo",
-                                    cardId: card.id,
-                                  })
-                                }
-                              >
-                                ← Todo
-                              </button>
-                            )}
-                            {key !== "inprogress" && (
-                              <button
-                                className="text-sm px-2 py-1 border rounded"
-                                onClick={() =>
-                                  dispatch({
-                                    type: "move",
-                                    from: key,
-                                    to: "inprogress",
-                                    cardId: card.id,
-                                  })
-                                }
-                              >
-                                → In Progress
-                              </button>
-                            )}
-                            {key !== "done" && (
-                              <button
-                                className="text-sm px-2 py-1 border rounded"
-                                onClick={() =>
-                                  dispatch({
-                                    type: "move",
-                                    from: key,
-                                    to: "done",
-                                    cardId: card.id,
-                                  })
-                                }
-                              >
-                                ✓ Done
-                              </button>
-                            )}
                             <button
                               className="text-sm px-2 py-1 border rounded text-red-600"
                               onClick={() =>
