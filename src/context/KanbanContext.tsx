@@ -128,7 +128,11 @@ export function KanbanProvider({ children }: { children: React.ReactNode }) {
       const raw = localStorage.getItem(STORAGE_KEY_ACTIVITY);
       if (raw) {
         const parsed = JSON.parse(raw) as Activity[];
-        setActivities(parsed.slice(-5));
+        const deduped = parsed.filter(
+          (a, i, arr) =>
+            arr.findIndex((b) => b.text === a.text && b.ts === a.ts) === i
+        );
+        setActivities(deduped.slice(-5));
       }
     } catch (e) {
       // ignore
@@ -147,7 +151,11 @@ export function KanbanProvider({ children }: { children: React.ReactNode }) {
   function pushActivity(text: string) {
     const act: Activity = { text, ts: Date.now() };
     setActivities((s) => {
-      const next = s.concat(act).slice(-5);
+      const next = s
+        .concat(act)
+        // dedupe by text
+        .filter((a, i, arr) => arr.findIndex((b) => b.text === a.text) === i)
+        .slice(-5);
       return next;
     });
   }

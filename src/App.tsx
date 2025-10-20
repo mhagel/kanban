@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useKanban } from "./context/KanbanContext";
 import type { Card, Column } from "./context/KanbanContext";
 import DraggableCard from "./components/DraggableCard";
@@ -8,7 +8,9 @@ function uid() {
 }
 
 export default function App() {
-  const { state, recordAction } = useKanban();
+  const { state, recordAction, activities } = useKanban();
+  const [showActivity, setShowActivity] = useState(false);
+  const activityRef = useRef<HTMLDivElement | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [column, setColumn] = useState<Column>("todo");
@@ -56,19 +58,79 @@ export default function App() {
     return () => document.removeEventListener("click", onDocClick);
   }, [focusedId]);
 
+  // close activity popup when clicking outside
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (!showActivity) return;
+      const target = e.target as Node | null;
+      if (!activityRef.current) return;
+      if (target && activityRef.current.contains(target)) return;
+      setShowActivity(false);
+    }
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [showActivity]);
+
+  function timeAgo(ts: number) {
+    const s = Math.floor((Date.now() - ts) / 1000);
+    if (s < 60) return `${s}s`;
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m}m`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h`;
+    const d = Math.floor(h / 24);
+    return `${d}d`;
+  }
+
+  console.log("activities", activities);
+
   return (
     <div className="min-h-screen bg-slate-100 p-6 w-full flex flex-col">
       <header className="mx-auto mb-6 w-full flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-slate-800">
           Kanban by Mark Hagelberg
         </h1>
-        <div className="ml-4 w-64">
-          <input
-            className="w-full rounded border px-3 py-2"
-            placeholder="Search cards..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+        <div className="flex items-center gap-3">
+          <div className="w-64">
+            <input
+              className="w-full rounded border px-3 py-2"
+              placeholder="Search cards..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+
+          <div ref={activityRef} className="relative">
+            <button
+              className="px-3 py-2 border rounded bg-white text-slate-700"
+              onClick={() => setShowActivity((s) => !s)}
+            >
+              Activity
+            </button>
+
+            {showActivity && (
+              <div className="absolute right-0 mt-2 w-72 bg-white shadow-lg rounded p-3 z-50">
+                <div className="font-medium mb-2">Recent activity</div>
+                <ul className="text-sm text-slate-700 space-y-2 max-h-56 overflow-auto">
+                  {(activities.length === 0 && (
+                    <li className="text-slate-500">No recent activity</li>
+                  )) ||
+                    activities
+                      // sort by timestamp descending
+                      .sort((a, b) => b.ts - a.ts)
+                      .slice()
+                      .map((a) => (
+                        <li key={a.ts} className="flex justify-between">
+                          <span>{a.text}</span>
+                          <span className="text-xs text-slate-400 ml-2">
+                            {timeAgo(a.ts)}
+                          </span>
+                        </li>
+                      ))}
+                </ul>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
