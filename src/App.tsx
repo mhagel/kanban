@@ -12,6 +12,7 @@ export default function App() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [column, setColumn] = useState<Column>("todo");
+  const [query, setQuery] = useState<string>("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>("");
@@ -56,8 +57,16 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-100 p-6 w-full flex flex-col">
-      <header className="mx-auto mb-6 w-full">
+      <header className="mx-auto mb-6 w-full flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-slate-800">Kanban</h1>
+        <div className="ml-4 w-64">
+          <input
+            className="w-full rounded border px-3 py-2"
+            placeholder="Search cards..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
       </header>
 
       <main className="flex flex-col mx-auto w-full">
@@ -137,28 +146,49 @@ export default function App() {
                   <h2 className="font-medium mb-6 flex items-center justify-between text-slate-900">
                     <span className="text-lg">{title}</span>
                     <span className="text-sm text-slate-500">
-                      {state[key].length}
+                      {
+                        // show filtered count when a query is active
+                        ((): number => {
+                          if (!query.trim()) return state[key].length;
+                          const q = query.toLowerCase();
+                          return state[key].filter((c: Card) => {
+                            return (
+                              c.title.toLowerCase().includes(q) ||
+                              (c.description || "").toLowerCase().includes(q)
+                            );
+                          }).length;
+                        })()
+                      }
                     </span>
                   </h2>
                   <ul className="space-y-2">
-                    {state[key].map((card: Card, index: number) => (
-                      <DraggableCard
-                        key={card.id}
-                        card={card}
-                        column={key}
-                        index={index}
-                        draggingId={draggingId}
-                        setDraggingId={setDraggingId}
-                        editingId={editingId}
-                        setEditingId={setEditingId}
-                        editValue={editValue}
-                        setEditValue={setEditValue}
-                        dragOverIndexByColumn={dragOverIndexByColumn}
-                        setDragOverIndexByColumn={setDragOverIndexByColumn}
-                        focusedId={focusedId}
-                        setFocusedId={setFocusedId}
-                      />
-                    ))}
+                    {state[key]
+                      .filter((c: Card) => {
+                        if (!query.trim()) return true;
+                        const q = query.toLowerCase();
+                        return (
+                          c.title.toLowerCase().includes(q) ||
+                          (c.description || "").toLowerCase().includes(q)
+                        );
+                      })
+                      .map((card: Card, index: number) => (
+                        <DraggableCard
+                          key={card.id}
+                          card={card}
+                          column={key}
+                          index={index}
+                          draggingId={draggingId}
+                          setDraggingId={setDraggingId}
+                          editingId={editingId}
+                          setEditingId={setEditingId}
+                          editValue={editValue}
+                          setEditValue={setEditValue}
+                          dragOverIndexByColumn={dragOverIndexByColumn}
+                          setDragOverIndexByColumn={setDragOverIndexByColumn}
+                          focusedId={focusedId}
+                          setFocusedId={setFocusedId}
+                        />
+                      ))}
                   </ul>
                 </div>
               ))}
