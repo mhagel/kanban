@@ -18,6 +18,7 @@ export type Action =
   | { type: "set"; state: State };
 
 export type Activity = { text: string; ts: number };
+export type ActivityState = Record<"actions", Activity[]>;
 
 const STORAGE_KEY = "kanban.state.v1";
 const STORAGE_KEY_ACTIVITY = "kanban.activity.v1";
@@ -83,11 +84,14 @@ function reducer(state: State, action: Action): State {
 }
 
 const initialState: State = { todo: [], inprogress: [], done: [] };
+// const initialActivityState: ActivityState = {
+//   actions: [],
+// };
 
 type ContextValue = {
   state: State;
   dispatch: React.Dispatch<Action>;
-  activities: Activity[];
+  activities: ActivityState;
   recordAction: (a: Action) => void;
 };
 
@@ -95,7 +99,51 @@ const KanbanContext = createContext<ContextValue | undefined>(undefined);
 
 export function KanbanProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
-  const [activities, setActivities] = React.useState<Activity[]>([]);
+  const initialActivityState: ActivityState = { actions: [] };
+  type ActivityAction =
+    | { type: "push"; text: string }
+    | { type: "set"; actions: Activity[] };
+
+  function activityReducer(
+    state: ActivityState,
+    action: ActivityAction
+  ): ActivityState {
+    switch (action.type) {
+      case "push": {
+        const act: Activity = { text: action.text, ts: Date.now() };
+        const concatenated = state.actions.concat(act);
+        const deduped = concatenated.filter(
+          (a, i, arr) => arr.findIndex((b) => b.text === a.text) === i
+        );
+        return { actions: deduped.slice(-5) };
+      }
+      case "set":
+        return { actions: action.actions.slice(-5) };
+      default:
+        return state;
+    }
+  }
+
+  const [activities, dispatchActivities] = React.useReducer(
+    activityReducer,
+    undefined,
+    () => {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY_ACTIVITY);
+        if (!raw) return initialActivityState;
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const deduped = (parsed as Activity[]).filter(
+            (a, i, arr) => arr.findIndex((b) => b.text === a.text) === i
+          );
+          return { actions: deduped.slice(-5) };
+        }
+      } catch (e) {
+        // ignore and fall through to default
+      }
+      return initialActivityState;
+    }
+  );
   const inited = useRef(false);
 
   // hydrate
@@ -122,42 +170,20 @@ export function KanbanProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state]);
 
-  // hydrate activities
+  // persist activities.actions whenever they change
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY_ACTIVITY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as Activity[];
-        const deduped = parsed.filter(
-          (a, i, arr) =>
-            arr.findIndex((b) => b.text === a.text && b.ts === a.ts) === i
-        );
-        setActivities(deduped.slice(-5));
-      }
-    } catch (e) {
-      // ignore
-    }
-  }, []);
-
-  // persist activities
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_ACTIVITY, JSON.stringify(activities));
+      localStorage.setItem(
+        STORAGE_KEY_ACTIVITY,
+        JSON.stringify(activities.actions)
+      );
     } catch (e) {
       // ignore
     }
   }, [activities]);
 
   function pushActivity(text: string) {
-    const act: Activity = { text, ts: Date.now() };
-    setActivities((s) => {
-      const next = s
-        .concat(act)
-        // dedupe by text
-        .filter((a, i, arr) => arr.findIndex((b) => b.text === a.text) === i)
-        .slice(-5);
-      return next;
-    });
+    dispatchActivities({ type: "push", text });
   }
 
   function getReadableName(column: Column) {

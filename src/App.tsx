@@ -110,10 +110,10 @@ export default function App() {
               <div className="absolute right-0 mt-2 w-72 bg-white shadow-lg rounded p-3 z-50">
                 <div className="font-medium mb-2">Recent activity</div>
                 <ul className="text-sm text-slate-700 space-y-2 max-h-56 overflow-auto">
-                  {(activities.length === 0 && (
+                  {(activities.actions.length === 0 && (
                     <li className="text-slate-500">No recent activity</li>
                   )) ||
-                    activities
+                    activities.actions
                       // sort by timestamp descending
                       .sort((a, b) => b.ts - a.ts)
                       .slice()
