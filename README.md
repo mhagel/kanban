@@ -5,7 +5,7 @@ Task tracking, built in React/Tailwind/TypeScript. Bootstrapped with [Vite](http
 ## Time Spent and shortcuts
 
 I spent about 5-6 hours on this.
-It was built with Github Copilot in VSCode. This sped up development quite a bit. I decided to go for all of the stretch goals,but I kept the styling minimal.
+It was built with Github Copilot in VSCode. This sped up development quite a bit. I decided to go for all of the stretch goals, but I kept the styling minimal.
 
 ## Startup Instructions
 
