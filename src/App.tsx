@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useKanban } from "./context/KanbanContext";
 import type { Card, Column } from "./context/KanbanContext";
 import DraggableCard from "./components/DraggableCard";
@@ -18,6 +18,7 @@ export default function App() {
   const [dragOverIndexByColumn, setDragOverIndexByColumn] = useState<
     Record<Column, number | null>
   >({ todo: null, inprogress: null, done: null });
+  const [focusedId, setFocusedId] = useState<string | null>(null);
 
   const addCard = (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -30,7 +31,28 @@ export default function App() {
     dispatch({ type: "add", column, card });
     setTitle("");
     setDescription("");
+    // focus the newly created card. Defer to next tick so the originating
+    // click (submit) doesn't immediately bubble to the document click
+    // listener and clear the focus.
+    setTimeout(() => setFocusedId(card.id), 0);
   };
+
+  // clear focusedId when clicking anywhere outside the focused card
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (!focusedId) return;
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      // if the click happened inside the focused card, keep focus
+      if (target.closest && target.closest(`[data-card-id="${focusedId}"]`)) {
+        return;
+      }
+      setFocusedId(null);
+    }
+
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [focusedId]);
 
   return (
     <div className="min-h-screen bg-slate-100 p-6 w-full flex flex-col">
@@ -133,6 +155,8 @@ export default function App() {
                         setEditValue={setEditValue}
                         dragOverIndexByColumn={dragOverIndexByColumn}
                         setDragOverIndexByColumn={setDragOverIndexByColumn}
+                        focusedId={focusedId}
+                        setFocusedId={setFocusedId}
                       />
                     ))}
                   </ul>

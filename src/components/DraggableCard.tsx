@@ -16,6 +16,8 @@ type Props = {
   setDragOverIndexByColumn: React.Dispatch<
     React.SetStateAction<Record<Column, number | null>>
   >;
+  focusedId?: string | null;
+  setFocusedId?: (id: string | null) => void;
 };
 
 export default function DraggableCard({
@@ -30,12 +32,19 @@ export default function DraggableCard({
   setEditValue,
   dragOverIndexByColumn,
   setDragOverIndexByColumn,
+  focusedId,
+  setFocusedId,
 }: Props) {
   const { dispatch } = useKanban();
 
   return (
     <li
       key={card.id}
+      data-card-id={card.id}
+      onClick={() => {
+        // clicking inside the card should set/keep focus on this card
+        if (setFocusedId) setFocusedId(card.id);
+      }}
       draggable
       onDragStart={(e) => {
         setDraggingId(card.id);
@@ -79,7 +88,9 @@ export default function DraggableCard({
       }}
       className={`border rounded p-3 bg-slate-200 w-full h-[160px] flex flex-col cursor-grab transition-transform duration-150 ${
         !!draggingId && draggingId === card.id ? "cursor-grabbing" : ""
-      } ${dragOverIndexByColumn[column] === index ? "translate-y-5" : ""}`}
+      } ${dragOverIndexByColumn[column] === index ? "translate-y-5" : ""} ${
+        focusedId === card.id ? "ring-2 ring-blue-500 border-blue-500" : ""
+      }`}
     >
       <div className="flex flex-col gap-2 h-full justify-between">
         <div className="text-slate-900 flex flex-col">
@@ -138,9 +149,10 @@ export default function DraggableCard({
         <div className="flex gap-1 justify-between">
           <button
             className="text-sm px-2 py-1 border rounded text-red-600"
-            onClick={() =>
-              dispatch({ type: "remove", column, cardId: card.id })
-            }
+            onClick={() => {
+              if (setFocusedId) setFocusedId(null);
+              dispatch({ type: "remove", column, cardId: card.id });
+            }}
           >
             ✕
           </button>
