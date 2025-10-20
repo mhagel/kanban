@@ -85,11 +85,14 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-100 p-6 w-full flex flex-col">
       <header className="mx-auto mb-6 w-full flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-slate-800">
-          Kanban by Mark Hagelberg
-        </h1>
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-800">Kanban</h1>
+          <h2 className="text-1xl font-semibold text-slate-800 hidden md:block">
+            by Mark Hagelberg
+          </h2>
+        </div>
         <div className="flex items-center gap-3">
-          <div className="w-64">
+          <div className="w-32 md:w-64">
             <input
               className="w-full rounded border px-3 py-2"
               placeholder="Search cards..."
@@ -141,13 +144,13 @@ export default function App() {
             onChange={(e) => setTitle(e.target.value)}
           />
           <input
-            className="flex-1 rounded border px-3 py-2"
+            className="flex-1 rounded border px-3 py-2 hidden md:block"
             placeholder="Description (optional)"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
           <select
-            className="rounded border px-2"
+            className="rounded border px-2 hidden md:block"
             value={column}
             onChange={(e) => setColumn(e.target.value as Column)}
           >
@@ -172,89 +175,93 @@ export default function App() {
           ];
 
           return (
-            <section className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
-              {columns.map(({ key, title }) => (
-                <div
-                  key={key}
-                  // drop target
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    const payload = e.dataTransfer.getData("text/plain");
-                    setDraggingId(null);
-                    try {
-                      const parsed = JSON.parse(payload) as {
-                        id: string;
-                        from: Column;
-                      };
-                      if (parsed && parsed.id) {
-                        // check if id is already in column
-                        if (state[key].some((c: Card) => c.id === parsed.id)) {
-                          return;
-                        }
+            <section className="w-full">
+              <div className="flex gap-4 md:grid md:grid-cols-3 md:gap-4 w-full overflow-x-auto pb-4">
+                {columns.map(({ key, title }) => (
+                  <div
+                    key={key}
+                    // drop target
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      const payload = e.dataTransfer.getData("text/plain");
+                      setDraggingId(null);
+                      try {
+                        const parsed = JSON.parse(payload) as {
+                          id: string;
+                          from: Column;
+                        };
+                        if (parsed && parsed.id) {
+                          // check if id is already in column
+                          if (
+                            state[key].some((c: Card) => c.id === parsed.id)
+                          ) {
+                            return;
+                          }
 
-                        recordAction({
-                          type: "move",
-                          from: parsed.from,
-                          to: key,
-                          cardId: parsed.id,
-                          index: state[key].length,
-                        });
+                          recordAction({
+                            type: "move",
+                            from: parsed.from,
+                            to: key,
+                            cardId: parsed.id,
+                            index: state[key].length,
+                          });
+                        }
+                      } catch (err) {
+                        // ignore
                       }
-                    } catch (err) {
-                      // ignore
-                    }
-                  }}
-                  className="bg-white rounded shadow p-4 h-screen w-[360px]"
-                >
-                  <h2 className="font-medium mb-6 flex items-center justify-between text-slate-900">
-                    <span className="text-lg">{title}</span>
-                    <span className="text-sm text-slate-500">
-                      {
-                        // show filtered count when a query is active
-                        ((): number => {
-                          if (!query.trim()) return state[key].length;
+                    }}
+                    className="bg-white rounded shadow p-4 h-screen w-[360px]"
+                  >
+                    <h2 className="font-medium mb-6 flex items-center justify-between text-slate-900">
+                      <span className="text-lg">{title}</span>
+                      <span className="text-sm text-slate-500">
+                        {
+                          // show filtered count when a query is active
+                          ((): number => {
+                            if (!query.trim()) return state[key].length;
+                            const q = query.toLowerCase();
+                            return state[key].filter((c: Card) => {
+                              return (
+                                c.title.toLowerCase().includes(q) ||
+                                (c.description || "").toLowerCase().includes(q)
+                              );
+                            }).length;
+                          })()
+                        }
+                      </span>
+                    </h2>
+                    <ul className="space-y-2">
+                      {state[key]
+                        .filter((c: Card) => {
+                          if (!query.trim()) return true;
                           const q = query.toLowerCase();
-                          return state[key].filter((c: Card) => {
-                            return (
-                              c.title.toLowerCase().includes(q) ||
-                              (c.description || "").toLowerCase().includes(q)
-                            );
-                          }).length;
-                        })()
-                      }
-                    </span>
-                  </h2>
-                  <ul className="space-y-2">
-                    {state[key]
-                      .filter((c: Card) => {
-                        if (!query.trim()) return true;
-                        const q = query.toLowerCase();
-                        return (
-                          c.title.toLowerCase().includes(q) ||
-                          (c.description || "").toLowerCase().includes(q)
-                        );
-                      })
-                      .map((card: Card, index: number) => (
-                        <DraggableCard
-                          key={card.id}
-                          card={card}
-                          column={key}
-                          index={index}
-                          draggingId={draggingId}
-                          setDraggingId={setDraggingId}
-                          editingId={editingId}
-                          setEditingId={setEditingId}
-                          editValue={editValue}
-                          setEditValue={setEditValue}
-                          dragOverIndexByColumn={dragOverIndexByColumn}
-                          setDragOverIndexByColumn={setDragOverIndexByColumn}
-                          focusedId={focusedId}
-                          setFocusedId={setFocusedId}
-                        />
-                      ))}
-                  </ul>
-                </div>
-              ))}
+                          return (
+                            c.title.toLowerCase().includes(q) ||
+                            (c.description || "").toLowerCase().includes(q)
+                          );
+                        })
+                        .map((card: Card, index: number) => (
+                          <DraggableCard
+                            key={card.id}
+                            card={card}
+                            column={key}
+                            index={index}
+                            draggingId={draggingId}
+                            setDraggingId={setDraggingId}
+                            editingId={editingId}
+                            setEditingId={setEditingId}
+                            editValue={editValue}
+                            setEditValue={setEditValue}
+                            dragOverIndexByColumn={dragOverIndexByColumn}
+                            setDragOverIndexByColumn={setDragOverIndexByColumn}
+                            focusedId={focusedId}
+                            setFocusedId={setFocusedId}
+                          />
+                        ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
             </section>
           );
         })()}
