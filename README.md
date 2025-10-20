@@ -1,8 +1,13 @@
 # Kanban by Mark Hagelberg
 
-React/Tailwind. Bootstrapped with Vite.
+Task tracking, built in React/Tailwind. Bootstrapped with [Vite](https://main.vitejs.dev/guide/).
 
-## Development
+## Time Spent and shortcuts
+
+I spent about 5 hours on this.
+It was built with Github Copilot in VSCode. This sped up development quite a bit. I decided to go for all of the stretch goals. But I kept the styling minimal.
+
+## Startup Instructions
 
 Start the dev server with:
 
