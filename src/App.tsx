@@ -8,7 +8,7 @@ function uid() {
 }
 
 export default function App() {
-  const { state, dispatch } = useKanban();
+  const { state, recordAction } = useKanban();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [column, setColumn] = useState<Column>("todo");
@@ -29,7 +29,8 @@ export default function App() {
       title: title.trim(),
       description: description.trim() || undefined,
     };
-    dispatch({ type: "add", column, card });
+    // use recordAction so the activity is recorded
+    recordAction({ type: "add", column, card });
     setTitle("");
     setDescription("");
     // focus the newly created card. Defer to next tick so the originating
@@ -58,7 +59,9 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-100 p-6 w-full flex flex-col">
       <header className="mx-auto mb-6 w-full flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-slate-800">Kanban</h1>
+        <h1 className="text-2xl font-semibold text-slate-800">
+          Kanban by Mark Hagelberg
+        </h1>
         <div className="ml-4 w-64">
           <input
             className="w-full rounded border px-3 py-2"
@@ -129,7 +132,7 @@ export default function App() {
                           return;
                         }
 
-                        dispatch({
+                        recordAction({
                           type: "move",
                           from: parsed.from,
                           to: key,

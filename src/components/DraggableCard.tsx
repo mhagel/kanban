@@ -35,7 +35,7 @@ export default function DraggableCard({
   focusedId,
   setFocusedId,
 }: Props) {
-  const { dispatch } = useKanban();
+  const { recordAction } = useKanban();
 
   return (
     <li
@@ -74,7 +74,7 @@ export default function DraggableCard({
           const parsed = JSON.parse(payload) as { id: string; from: Column };
           if (parsed && parsed.id) {
             if (parsed.id === card.id && parsed.from === column) return;
-            dispatch({
+            recordAction({
               type: "move",
               from: parsed.from,
               to: column,
@@ -103,7 +103,7 @@ export default function DraggableCard({
               onBlur={() => {
                 const v = editValue.trim();
                 if (v && v !== card.title)
-                  dispatch({
+                  recordAction({
                     type: "update",
                     column,
                     cardId: card.id,
@@ -116,7 +116,7 @@ export default function DraggableCard({
                 if (e.key === "Enter") {
                   const v = editValue.trim();
                   if (v && v !== card.title)
-                    dispatch({
+                    recordAction({
                       type: "update",
                       column,
                       cardId: card.id,
@@ -151,7 +151,7 @@ export default function DraggableCard({
             className="text-sm px-2 py-1 border rounded text-red-600"
             onClick={() => {
               if (setFocusedId) setFocusedId(null);
-              dispatch({ type: "remove", column, cardId: card.id });
+              recordAction({ type: "remove", column, cardId: card.id });
             }}
           >
             ✕

@@ -17,7 +17,10 @@ export type Action =
   | { type: "update"; column: Column; cardId: string; changes: Partial<Card> }
   | { type: "set"; state: State };
 
+export type Activity = { text: string; ts: number };
+
 const STORAGE_KEY = "kanban.state.v1";
+const STORAGE_KEY_ACTIVITY = "kanban.activity.v1";
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -84,12 +87,15 @@ const initialState: State = { todo: [], inprogress: [], done: [] };
 type ContextValue = {
   state: State;
   dispatch: React.Dispatch<Action>;
+  activities: Activity[];
+  recordAction: (a: Action) => void;
 };
 
 const KanbanContext = createContext<ContextValue | undefined>(undefined);
 
 export function KanbanProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const [activities, setActivities] = React.useState<Activity[]>([]);
   const inited = useRef(false);
 
   // hydrate
@@ -116,8 +122,71 @@ export function KanbanProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state]);
 
+  // hydrate activities
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_ACTIVITY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Activity[];
+        setActivities(parsed.slice(-5));
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, []);
+
+  // persist activities
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_ACTIVITY, JSON.stringify(activities));
+    } catch (e) {
+      // ignore
+    }
+  }, [activities]);
+
+  function pushActivity(text: string) {
+    const act: Activity = { text, ts: Date.now() };
+    setActivities((s) => {
+      const next = s.concat(act).slice(-5);
+      return next;
+    });
+  }
+
+  // helper that both dispatches and records activity for tracked actions
+  function recordAction(action: Action) {
+    // interpret action and generate activity texts for tracked types
+    try {
+      if (action.type === "add") {
+        pushActivity(`${action.card.title} created`);
+      } else if (action.type === "remove") {
+        // find title from current state if possible
+        const col = state[action.column] || [];
+        const found = col.find((c) => c.id === action.cardId);
+        const title = found ? found.title : action.cardId;
+        pushActivity(`${title} deleted`);
+      } else if (action.type === "move") {
+        // find title from source column if possible
+        const fromCol = state[action.from] || [];
+        const found = fromCol.find((c) => c.id === action.cardId);
+        const title = found ? found.title : action.cardId;
+        pushActivity(`${title} moved to ${action.to}`);
+      } else if (action.type === "update") {
+        const col = state[action.column] || [];
+        const found = col.find((c) => c.id === action.cardId);
+        const title = found ? found.title : action.cardId;
+        pushActivity(`${title} updated`);
+      }
+    } catch (e) {
+      // ignore
+    }
+    // always dispatch the action
+    dispatch(action as Action);
+  }
+
   return (
-    <KanbanContext.Provider value={{ state, dispatch }}>
+    <KanbanContext.Provider
+      value={{ state, dispatch, activities, recordAction }}
+    >
       {children}
     </KanbanContext.Provider>
   );
