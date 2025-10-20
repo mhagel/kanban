@@ -160,6 +160,16 @@ export function KanbanProvider({ children }: { children: React.ReactNode }) {
     });
   }
 
+  function getReadableName(column: Column) {
+    const readables = {
+      todo: "To Do",
+      inprogress: "In Progress",
+      done: "Done",
+    };
+
+    return readables[column] || "";
+  }
+
   // helper that both dispatches and records activity for tracked actions
   function recordAction(action: Action) {
     // interpret action and generate activity texts for tracked types
@@ -177,7 +187,7 @@ export function KanbanProvider({ children }: { children: React.ReactNode }) {
         const fromCol = state[action.from] || [];
         const found = fromCol.find((c) => c.id === action.cardId);
         const title = found ? found.title : action.cardId;
-        pushActivity(`${title} moved to ${action.to}`);
+        pushActivity(`${title} moved to ${getReadableName(action.to)}`);
       } else if (action.type === "update") {
         const col = state[action.column] || [];
         const found = col.find((c) => c.id === action.cardId);

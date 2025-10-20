@@ -82,8 +82,6 @@ export default function App() {
     return `${d}d`;
   }
 
-  console.log("activities", activities);
-
   return (
     <div className="min-h-screen bg-slate-100 p-6 w-full flex flex-col">
       <header className="mx-auto mb-6 w-full flex items-center justify-between">
